@@ -1,8 +1,8 @@
 from argparse import ArgumentParser
 
 from pytorch_lightning import Trainer
-from pytorch_lightning.callbacks import ModelCheckpoint
-from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
+from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
+from pytorch_lightning.loggers import TensorBoardLogger
 from torch.utils.data import DataLoader
 
 import models
@@ -12,24 +12,22 @@ import datasets
 def main(hparams):
     model = models.__dict__[hparams.model](hparams)
     train_dataset = datasets.__dict__[hparams.dataset](hparams, hparams.train_data_root)
-    val_dataset = datasets.__dict__[hparams.dataset](hparams, hparams.val_data_root, val=True)
+    val_dataset = datasets.__dict__[hparams.dataset](hparams, hparams.val_data_root, train=False)
 
     trainer = Trainer(
         max_epochs=800,
         gpus=hparams.gpus,
+        benchmark=True,
         num_nodes=hparams.nodes,
         check_val_every_n_epoch=hparams.val,
-        early_stop_callback=None,
         checkpoint_callback=ModelCheckpoint(
             filepath=hparams.checkpoint,
-            monitor='avg_psnr',
-            mode='max',
-            save_top_k=-1,
             verbose=True,
-            prefix=hparams.name
+            prefix=hparams.name,
+            period=hparams.val
         ),
-        logger=[TensorBoardLogger('tb_logs', name=hparams.name),
-                WandbLogger('wandb_logs', tags=hparams.name)],
+        logger=[TensorBoardLogger('tb_logs', name=hparams.name)],
+        callbacks=[LearningRateMonitor(logging_interval='step')],
         distributed_backend='ddp',
         precision=16 if hparams.use_amp else 32,
         sync_batchnorm=hparams.sync_bn,
@@ -37,11 +35,10 @@ def main(hparams):
     )
 
     train_data_loader = DataLoader(train_dataset, batch_size=hparams.batch_size, pin_memory=True, num_workers=hparams.workers, shuffle=True)
-    val_data_loader = DataLoader(val_dataset, batch_size=4, pin_memory=True, num_workers=2, shuffle=False)
+    val_data_loader = DataLoader(val_dataset, batch_size=1, pin_memory=True, num_workers=hparams.workers, shuffle=False)
 
     if hparams.test:
         assert hparams.resume is not None
-        model = models.load_from_checkpoint(checkpoint_path=hparams.resume)
         trainer.test(model, val_data_loader)
     else:
         trainer.fit(model, train_data_loader, val_data_loader)

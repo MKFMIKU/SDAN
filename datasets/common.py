@@ -2,12 +2,11 @@ import random
 
 import numpy as np
 import torch
-from torchvision.transforms.functional import normalize
 
 
-def augment(*args, hflip=True, rot=True):
+def augment(*args, hflip=True, vflip=False, rot=True):
     hflip = hflip and random.random() < 0.5
-    vflip = rot and random.random() < 0.5
+    vflip = vflip and random.random() < 0.5
     rot90 = rot and random.random() < 0.5
 
     def _augment(img):
@@ -20,19 +19,40 @@ def augment(*args, hflip=True, rot=True):
     return [_augment(a) for a in args]
 
 
-def get_patch(*args, patch_size_h, patch_size_w):
+def get_patch(*args, patch_size=96, scale=2, multi=False, input_large=False):
     ih, iw = args[0].shape[:2]
-    ix = random.randrange(0, iw - patch_size_w + 1)
-    iy = random.randrange(0, ih - patch_size_h + 1)
-    return [a[iy:iy + patch_size_h, ix:ix + patch_size_w, :] for a in args]
+
+    if not input_large:
+        p = scale if multi else 1
+        tp = p * patch_size
+        ip = tp // scale
+    else:
+        tp = patch_size
+        ip = patch_size
+
+    ix = random.randrange(0, iw - ip + 1)
+    iy = random.randrange(0, ih - ip + 1)
+
+    if not input_large:
+        tx, ty = scale * ix, scale * iy
+    else:
+        tx, ty = ix, iy
+
+    ret = [
+        args[0][iy:iy + ip, ix:ix + ip, :],
+        *[a[ty:ty + tp, tx:tx + tp, :] for a in args[1:]]
+    ]
+
+    return ret
 
 
-def np2Tensor(*args):
+def np2Tensor(*args, rgb_range=255, normalize=False):
     def _np2Tensor(img):
         np_transpose = np.ascontiguousarray(img.transpose((2, 0, 1)))
         tensor = torch.from_numpy(np_transpose).float()
-        tensor.mul_(1 / 255)
-        tensor = normalize(tensor, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        tensor.mul_(1 / rgb_range)
+        if normalize:
+            tensor = torch.nn.functional.normalize(tensor, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         return tensor
 
     return [_np2Tensor(a) for a in args]

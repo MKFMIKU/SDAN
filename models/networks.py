@@ -10,7 +10,6 @@ from models.base_network import BaseNetwork
 import math
 from torch.nn import init
 
-
 # Defines the GAN loss which uses either LSGAN or the regular GAN.
 # When LSGAN is used, it is basically same as MSELoss,
 # but it abstracts away the need to create the target label tensor
@@ -134,11 +133,11 @@ class VGG19(torch.nn.Module):
 
 # Perceptual loss that uses a pretrained VGG network
 class VGGLoss(nn.Module):
-    def __init__(self, device):
+    def __init__(self, weights=[1.0 / 16, 1.0 / 8, 1.0 / 4, 1.0 / 2, 1.0]):
         super(VGGLoss, self).__init__()
-        self.vgg = VGG19().to(device)
+        self.vgg = VGG19()
         self.criterion = nn.L1Loss()
-        self.weights = [1.0 / 16, 1.0 / 8, 1.0 / 4, 1.0 / 2, 1.0]
+        self.weights = weights
 
     def forward(self, x, y):
         x_vgg = self.vgg(x)

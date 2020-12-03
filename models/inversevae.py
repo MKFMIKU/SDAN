@@ -108,6 +108,7 @@ class InverseVAENetwork(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         data = batch['data']
         label = batch['label']
+        res = self.nm2(self.conv2(res))
 
         output, zs = self.fforward(data, no_noise=True)
 
